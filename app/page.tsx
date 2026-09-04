@@ -126,61 +126,6 @@ const INITIAL_PICKUP_REQUESTS: WastePickupRequest[] = [
   },
 ];
 
-const INITIAL_EXCHANGE_LISTINGS: ExchangeListing[] = [
-  {
-    id: "item-1",
-    title: "Ergonomic Office Desk Chair",
-    category: "Furniture",
-    condition: "Good",
-    location: "Greenwood Ward 2",
-    distance: "0.8 miles away",
-    postedBy: "Sarah Jenkins",
-    postedTime: "2 hours ago",
-    image: "https://images.unsplash.com/photo-1580481072645-022f9a6d1270?auto=format&fit=crop&w=600&q=80",
-    description: "Fully working adjustable mesh chair. Upgraded my home office, perfect for students or remote work.",
-    status: "Available",
-  },
-  {
-    id: "item-2",
-    title: "Vintage Wood & Brass Table Lamp",
-    category: "Home & Lighting",
-    condition: "Like New",
-    location: "Oakridge Ward 4",
-    distance: "1.4 miles away",
-    postedBy: "David Chen",
-    postedTime: "5 hours ago",
-    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80",
-    description: "Works perfectly with warm LED bulb. Beautiful wooden base, moving to a furnished apartment.",
-    status: "Available",
-  },
-  {
-    id: "item-3",
-    title: "Children's Wooden Building Blocks Set",
-    category: "Toys & Books",
-    condition: "Good",
-    location: "Pine District Ward 1",
-    distance: "2.1 miles away",
-    postedBy: "Elena Rostova",
-    postedTime: "1 day ago",
-    image: "https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=600&q=80",
-    description: "Complete 100-piece natural wood block set. Non-toxic finish. Kids have grown out of it.",
-    status: "Available",
-  },
-  {
-    id: "item-4",
-    title: "Standing Electric Espresso Grinder",
-    category: "Appliances",
-    condition: "Like New",
-    location: "Central Ward 3",
-    distance: "0.5 miles away",
-    postedBy: "Marcus Thorne",
-    postedTime: "1 day ago",
-    image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80",
-    description: "Stainless steel burr grinder. Cleaned and tested. Includes original dosing cup.",
-    status: "Available",
-  },
-];
-
 const INITIAL_EXCHANGE_REQUESTS: ExchangeRequest[] = [
   {
     requestId: "EX-REQ-101",
@@ -223,7 +168,7 @@ export default function Home() {
   // Shared States
   const [complaints, setComplaints] = useState<WasteComplaint[]>(INITIAL_COMPLAINTS);
   const [pickupRequests, setPickupRequests] = useState<WastePickupRequest[]>(INITIAL_PICKUP_REQUESTS);
-  const [exchangeListings, setExchangeListings] = useState<ExchangeListing[]>(INITIAL_EXCHANGE_LISTINGS);
+  const [exchangeListings, setExchangeListings] = useState<ExchangeListing[]>([]);
   const [exchangeRequests, setExchangeRequests] = useState<ExchangeRequest[]>(INITIAL_EXCHANGE_REQUESTS);
   const [pointsTransactions, setPointsTransactions] = useState<PointsTransaction[]>([]);
   const [wasteReports, setWasteReports] = useState<WasteReport[]>([]);
@@ -272,7 +217,7 @@ export default function Home() {
       if (data && data.length > 0) setPickupRequests(data);
     });
     const unsubscribeListings = subscribeToExchangeListings((data) => {
-      if (data && data.length > 0) setExchangeListings(data);
+      setExchangeListings(data || []);
     });
     const unsubscribeRequests = subscribeToExchangeRequests((data) => {
       if (data && data.length > 0) setExchangeRequests(data);

@@ -372,9 +372,7 @@ export function subscribeToExchangeListings(callback: (listings: ExchangeListing
             updatedAt: data.updatedAt || "",
           });
         });
-        if (listings.length > 0) {
-          callback(listings);
-        }
+        callback(listings);
       },
       (error) => {
         console.warn("Firestore exchange listings snapshot info:", error.message);

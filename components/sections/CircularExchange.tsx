@@ -369,94 +369,127 @@ export const CircularExchange: React.FC<CircularExchangeProps> = ({
             </div>
           </div>
 
-          {/* Item Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredListings.map((item) => (
-              <div 
-                key={item.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-lg transition-all duration-200 flex flex-col group"
-              >
-                <div className="relative h-48 bg-slate-100 overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <span className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                    {item.category}
-                  </span>
-                  <span className="absolute top-3 right-3 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-emerald-200">
-                    {item.condition}
-                  </span>
-                </div>
-
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-1 group-hover:text-emerald-700 transition-colors">
-                      {item.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 space-y-3">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        {item.location}
-                      </span>
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <Clock className="w-3 h-3" />
-                        {item.postedTime}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-600 font-medium flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-emerald-600" />
-                        {item.postedBy}
-                      </span>
-
-                      {item.status?.toLowerCase() === "reserved" ? (
-                        <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-xl">
-                          Reserved
-                        </span>
-                      ) : item.status?.toLowerCase() === "adopted" ? (
-                        <span className="text-xs font-bold text-slate-600 bg-slate-200 px-3 py-1 rounded-xl">
-                          Handover Completed
-                        </span>
-                      ) : isItemOwner(item) ? (
-                        <span className="text-xs font-bold text-teal-700 bg-teal-100 px-3 py-1 rounded-xl flex items-center gap-1">
-                          <User className="w-3.5 h-3.5" />
-                          Listed by You
-                        </span>
-                      ) : hasUserRequested(item) ? (
-                        <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-xl">
-                          Request Pending
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (!authUser) {
-                              if (onOpenAuthModal) onOpenAuthModal();
-                            } else {
-                              setSelectedRequestItem(item);
-                            }
-                          }}
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3.5 py-1.5 rounded-xl text-xs transition-colors flex items-center gap-1 border border-emerald-200"
-                        >
-                          <PackageCheck className="w-3.5 h-3.5" />
-                          Request Item
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+          {/* Item Cards Grid / Empty State */}
+          {filteredListings.length === 0 ? (
+            <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center space-y-4 shadow-xs">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <PackageCheck className="w-7 h-7" />
               </div>
-            ))}
-          </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-800">
+                  No items available for exchange
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {searchQuery || selectedCategory !== "All"
+                    ? "No listings match your search or category filter."
+                    : "Be the first to list a pre-loved item for community exchange!"}
+                </p>
+              </div>
+              {!searchQuery && selectedCategory === "All" && (
+                <button
+                  onClick={() => {
+                    if (!authUser) {
+                      if (onOpenAuthModal) onOpenAuthModal();
+                    } else {
+                      setIsListingModalOpen(true);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  List an Item for Exchange
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {filteredListings.map((item) => (
+                <div 
+                  key={item.id}
+                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-lg transition-all duration-200 flex flex-col group"
+                >
+                  <div className="relative h-48 bg-slate-100 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <span className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      {item.category}
+                    </span>
+                    <span className="absolute top-3 right-3 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-emerald-200">
+                      {item.condition}
+                    </span>
+                  </div>
+
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-slate-900 text-sm line-clamp-1 group-hover:text-emerald-700 transition-colors">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 space-y-3">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          {item.location}
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <Clock className="w-3 h-3" />
+                          {item.postedTime}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 font-medium flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-emerald-600" />
+                          {item.postedBy}
+                        </span>
+
+                        {item.status?.toLowerCase() === "reserved" ? (
+                          <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-xl">
+                            Reserved
+                          </span>
+                        ) : item.status?.toLowerCase() === "adopted" ? (
+                          <span className="text-xs font-bold text-slate-600 bg-slate-200 px-3 py-1 rounded-xl">
+                            Handover Completed
+                          </span>
+                        ) : isItemOwner(item) ? (
+                          <span className="text-xs font-bold text-teal-700 bg-teal-100 px-3 py-1 rounded-xl flex items-center gap-1">
+                            <User className="w-3.5 h-3.5" />
+                            Listed by You
+                          </span>
+                        ) : hasUserRequested(item) ? (
+                          <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-xl">
+                            Request Pending
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (!authUser) {
+                                if (onOpenAuthModal) onOpenAuthModal();
+                              } else {
+                                setSelectedRequestItem(item);
+                              }
+                            }}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3.5 py-1.5 rounded-xl text-xs transition-colors flex items-center gap-1 border border-emerald-200"
+                          >
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            Request Item
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
