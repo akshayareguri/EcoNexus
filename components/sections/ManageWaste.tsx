@@ -61,8 +61,24 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!authUser) {
+      e.target.value = "";
+      setAnalysisError("Please log in to analyze your waste.");
+      if (onOpenAuthModal) onOpenAuthModal();
+      return;
+    }
+
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+
+      // Validate that file is a valid image (JPG, JPEG, PNG, WEBP)
+      const isImageMime = file.type && file.type.startsWith("image/");
+      const isImageExt = /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+      if (!isImageMime && !isImageExt) {
+        setAnalysisError("Please select a valid image file (.jpg, .png, or .webp).");
+        return;
+      }
+
       setUploadedFileName(file.name);
       setPickupRequested(false);
       setRequestError(null);
@@ -74,12 +90,14 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
       reader.onloadend = async () => {
         if (typeof reader.result === "string") {
           const rawDataUrl = reader.result;
-          const compressed = await compressImageDataUrl(rawDataUrl, 400, 400, 0.7);
-          setUploadedImageSrc(compressed);
 
           try {
-            // Trigger Featherless AI waste analysis server endpoint
-            const result = await analyzeWasteImage(rawDataUrl, file.name);
+            // Safely compress/resize large image (max 600x600, 0.75 quality) before API request
+            const compressed = await compressImageDataUrl(rawDataUrl, 600, 600, 0.75);
+            setUploadedImageSrc(compressed);
+
+            // Send compressed image Base64 data URL to Featherless AI
+            const result = await analyzeWasteImage(compressed, file.name);
             setAnalysisResult(result);
             saveWasteAnalysisRecordToFirestore(result);
             if (result.recycleDetails?.assignedRecycler) {
@@ -92,9 +110,43 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
           } finally {
             setIsAnalyzing(false);
           }
+        } else {
+          setIsAnalyzing(false);
+          setAnalysisError("Could not read the selected image file. Please try uploading again.");
         }
       };
+
+      reader.onerror = () => {
+        setIsAnalyzing(false);
+        setAnalysisError("Failed to read image file. Please try another photo.");
+      };
+
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRetryAnalysis = async () => {
+    if (!authUser) {
+      setAnalysisError("Please log in to analyze your waste.");
+      if (onOpenAuthModal) onOpenAuthModal();
+      return;
+    }
+    if (!uploadedImageSrc) return;
+    setAnalysisError(null);
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeWasteImage(uploadedImageSrc, uploadedFileName || "waste_photo.jpg");
+      setAnalysisResult(result);
+      saveWasteAnalysisRecordToFirestore(result);
+      if (result.recycleDetails?.assignedRecycler) {
+        setSelectedRecyclerId(result.recycleDetails.assignedRecycler.id);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to analyze image using Featherless AI.";
+      console.error("ManageWaste retry error:", msg);
+      setAnalysisError(msg);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -237,7 +289,8 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
                 type="file" 
                 accept="image/*" 
                 onChange={handleImageUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                disabled={!authUser}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
               />
               
               {uploadedImageSrc ? (
@@ -257,6 +310,38 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
                     <FileImage className="w-4 h-4" />
                     {uploadedFileName || "Uploaded Waste Image"}
                   </p>
+                </div>
+              ) : !authUser ? (
+                <div 
+                  onClick={() => {
+                    setAnalysisError("Please log in to analyze your waste.");
+                    if (onOpenAuthModal) onOpenAuthModal();
+                  }}
+                  className="space-y-3 py-2 cursor-pointer"
+                >
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      Please log in to analyze your waste.
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Authentication is required to upload photos and run the Featherless AI Analyzer.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAnalysisError("Please log in to analyze your waste.");
+                      if (onOpenAuthModal) onOpenAuthModal();
+                    }}
+                    className="inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-xs"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    Log In to Analyze Waste
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3 pointer-events-none">
@@ -279,20 +364,55 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
             </div>
           </div>
 
-          {/* Analysis Error State */}
+          {/* Analysis Error State / Auth Prompt */}
           {analysisError && (
-            <div className="bg-red-50 border border-red-200 text-red-800 rounded-2xl p-5 text-xs font-medium space-y-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-red-900">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-                Featherless AI Analysis Error
+            <div className={`border rounded-2xl p-5 text-xs font-medium space-y-3 ${
+              !authUser || analysisError.includes("log in")
+                ? "bg-amber-50 border-amber-200 text-amber-900"
+                : "bg-red-50 border-red-200 text-red-800"
+            }`}>
+              <div className={`flex items-center gap-2 font-bold text-sm ${
+                !authUser || analysisError.includes("log in")
+                  ? "text-amber-950"
+                  : "text-red-900"
+              }`}>
+                {!authUser || analysisError.includes("log in") ? (
+                  <Lock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                )}
+                {!authUser || analysisError.includes("log in") ? "Authentication Required" : "Featherless AI Analysis Notice"}
               </div>
               <p>{analysisError}</p>
-              <button
-                onClick={handleReset}
-                className="px-3 py-1.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 text-xs inline-flex items-center gap-1"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Try Another Photo
-              </button>
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                {!authUser || analysisError.includes("log in") ? (
+                  <button
+                    onClick={() => {
+                      if (onOpenAuthModal) onOpenAuthModal();
+                    }}
+                    className="px-4 py-2 bg-emerald-700 text-white font-bold rounded-xl hover:bg-emerald-800 text-xs inline-flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Lock className="w-3.5 h-3.5" /> Log In Now
+                  </button>
+                ) : (
+                  <>
+                    {uploadedImageSrc && (
+                      <button
+                        onClick={handleRetryAnalysis}
+                        className="px-3.5 py-1.5 bg-emerald-700 text-white font-bold rounded-xl hover:bg-emerald-800 text-xs inline-flex items-center gap-1.5 shadow-xs"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry Analysis
+                      </button>
+                    )}
+                    <button
+                      onClick={handleReset}
+                      className="px-3.5 py-1.5 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 text-xs inline-flex items-center gap-1.5"
+                    >
+                      Upload Different Photo
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -340,13 +460,30 @@ export const ManageWaste: React.FC<ManageWasteProps> = ({
             </div>
           ) : !analysisResult ? (
             <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center space-y-3 shadow-xs">
-              <Upload className="w-12 h-12 text-slate-300 mx-auto" />
+              {!authUser ? (
+                <Lock className="w-12 h-12 text-amber-500 mx-auto" />
+              ) : (
+                <Upload className="w-12 h-12 text-slate-300 mx-auto" />
+              )}
               <h3 className="text-base font-bold text-slate-700">
-                No Waste Image Uploaded Yet
+                {!authUser ? "Authentication Required for AI Analysis" : "No Waste Image Uploaded Yet"}
               </h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Please upload a photo of your waste item using the upload box on the left. Featherless AI will analyze your image and recommend the best action.
+                {!authUser
+                  ? "Please log in to analyze your waste. Featherless AI vision will analyze your image and recommend the best action upon login."
+                  : "Please upload a photo of your waste item using the upload box on the left. Featherless AI will analyze your image and recommend the best action."}
               </p>
+              {!authUser && (
+                <button
+                  onClick={() => {
+                    setAnalysisError("Please log in to analyze your waste.");
+                    if (onOpenAuthModal) onOpenAuthModal();
+                  }}
+                  className="mt-2 inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-xs"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Log In to Analyze Waste
+                </button>
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6 animate-fadeIn">

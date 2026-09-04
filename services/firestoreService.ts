@@ -229,9 +229,9 @@ export function getStoredListingImage(listingId: string): string | null {
 
 export function compressImageDataUrl(
   dataUrl: string,
-  maxWidth = 400,
-  maxHeight = 400,
-  quality = 0.7
+  maxWidth = 300,
+  maxHeight = 300,
+  quality = 0.55
 ): Promise<string> {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !dataUrl || !dataUrl.startsWith("data:image/")) {
@@ -289,12 +289,11 @@ export function getCategoryFallbackImage(category?: string): string {
   return DEFAULT_EXCHANGE_PLACEHOLDER;
 }
 
-function getValidHostedImageUrl(rawUrl?: string | null): string | null {
+function getValidExchangeImageUrl(rawUrl?: string | null): string | null {
   if (!rawUrl) return null;
   const str = rawUrl.trim();
-  // Filter out any Base64 data URLs or invalid non-http URLs
-  if (str.startsWith("data:") || str.startsWith("blob:") || str.length > 2000) {
-    return null;
+  if (str.startsWith("data:image/") && str.length < 100000) {
+    return str;
   }
   if (str.startsWith("http://") || str.startsWith("https://")) {
     return str;
@@ -310,9 +309,8 @@ export async function fetchExchangeListingsFromFirestore(): Promise<ExchangeList
     querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const docId = docSnap.id;
-      const storedLocalImage = getStoredListingImage(docId);
-      const validUrl = getValidHostedImageUrl(data.imageUrl) || getValidHostedImageUrl(data.image);
-      const displayImage = storedLocalImage || validUrl || (typeof data.image === "string" && data.image.length > 0 && !data.image.startsWith("data:") ? data.image : getCategoryFallbackImage(data.category));
+      const validUrl = getValidExchangeImageUrl(data.imageUrl) || getValidExchangeImageUrl(data.image);
+      const displayImage = validUrl || getCategoryFallbackImage(data.category);
 
       listings.push({
         id: docId,
@@ -326,7 +324,7 @@ export async function fetchExchangeListingsFromFirestore(): Promise<ExchangeList
         distance: data.distance || "0.5 miles away",
         postedBy: data.postedBy || data.ownerName || "Eco Citizen",
         postedTime: data.postedTime || "Recently",
-        imageUrl: validUrl || undefined,
+        imageUrl: displayImage,
         image: displayImage,
         description: data.description || "",
         status: data.status || "available",
@@ -351,9 +349,8 @@ export function subscribeToExchangeListings(callback: (listings: ExchangeListing
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           const docId = docSnap.id;
-          const storedLocalImage = getStoredListingImage(docId);
-          const validUrl = getValidHostedImageUrl(data.imageUrl) || getValidHostedImageUrl(data.image);
-          const displayImage = storedLocalImage || validUrl || (typeof data.image === "string" && data.image.length > 0 && !data.image.startsWith("data:") ? data.image : getCategoryFallbackImage(data.category));
+          const validUrl = getValidExchangeImageUrl(data.imageUrl) || getValidExchangeImageUrl(data.image);
+          const displayImage = validUrl || getCategoryFallbackImage(data.category);
 
           listings.push({
             id: docId,
@@ -367,7 +364,7 @@ export function subscribeToExchangeListings(callback: (listings: ExchangeListing
             distance: data.distance || "0.5 miles away",
             postedBy: data.postedBy || data.ownerName || "Eco Citizen",
             postedTime: data.postedTime || "Recently",
-            imageUrl: validUrl || undefined,
+            imageUrl: displayImage,
             image: displayImage,
             description: data.description || "",
             status: data.status || "available",
@@ -393,11 +390,15 @@ export async function saveExchangeListingToFirestore(listing: ExchangeListing): 
   const docRef = doc(db, FIRESTORE_COLLECTIONS.EXCHANGE_LISTINGS, listing.id);
   const now = new Date().toISOString();
   
-  if (listing.image && listing.image.startsWith("data:image/")) {
-    saveListingImageToLocalStorage(listing.id, listing.image);
+  let validUrl = getValidExchangeImageUrl(listing.imageUrl) || getValidExchangeImageUrl(listing.image);
+
+  if (validUrl && validUrl.startsWith("data:image/")) {
+    validUrl = await compressImageDataUrl(validUrl, 300, 300, 0.55);
   }
 
-  const validUrl = getValidHostedImageUrl(listing.imageUrl) || getValidHostedImageUrl(listing.image) || getCategoryFallbackImage(listing.category);
+  if (!validUrl) {
+    validUrl = getCategoryFallbackImage(listing.category);
+  }
 
   const payload = {
     id: listing.id,
@@ -774,9 +775,10 @@ export function subscribeToUserEcoPoints(
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (typeof data.ecoPoints === "number") {
-            callback(data.ecoPoints);
-          }
+          const pts = typeof data.ecoPoints === "number" ? data.ecoPoints : 0;
+          callback(pts);
+        } else {
+          callback(0);
         }
       },
       (err) => console.warn("User ecoPoints snapshot info:", err.message)

@@ -131,7 +131,7 @@ export const CircularExchange: React.FC<CircularExchangeProps> = ({
       reader.onloadend = async () => {
         if (typeof reader.result === "string") {
           const rawDataUrl = reader.result;
-          const compressed = await compressImageDataUrl(rawDataUrl, 400, 400, 0.7);
+          const compressed = await compressImageDataUrl(rawDataUrl, 300, 300, 0.55);
           setNewImagePreview(compressed);
         }
       };
@@ -163,7 +163,7 @@ export const CircularExchange: React.FC<CircularExchangeProps> = ({
       
       let finalImage = categoryFallback;
       if (newImagePreview) {
-        finalImage = await compressImageDataUrl(newImagePreview, 400, 400, 0.7);
+        finalImage = await compressImageDataUrl(newImagePreview, 300, 300, 0.55);
       }
 
       const newItemId = `item-${Date.now()}`;
@@ -185,7 +185,7 @@ export const CircularExchange: React.FC<CircularExchangeProps> = ({
         postedBy: ownerName,
         postedTime: "Just now",
         image: finalImage,
-        imageUrl: categoryFallback,
+        imageUrl: finalImage,
         description: newDescription.trim() || "Usable pre-loved item looking for a new owner.",
         status: "available",
         createdAt: nowIso,

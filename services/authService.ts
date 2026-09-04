@@ -19,6 +19,7 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
   role: "citizen" | "recycler" | "municipality";
+  ecoPoints?: number;
   createdAt: string;
 }
 
@@ -31,17 +32,26 @@ export async function saveUserProfileToFirestore(
   displayName: string | null,
   role: "citizen" | "recycler" | "municipality" = "citizen"
 ): Promise<UserProfile> {
+  const userDocRef = doc(db, FIRESTORE_COLLECTIONS.USERS, uid);
+  const snap = await getDoc(userDocRef);
+
+  let existingEcoPoints = 0;
+  if (snap.exists() && typeof snap.data()?.ecoPoints === "number") {
+    existingEcoPoints = snap.data().ecoPoints;
+  }
+
   const profile: UserProfile = {
     uid,
     email: email || null,
     displayName: displayName || null,
     role,
-    createdAt: new Date().toISOString(),
+    ecoPoints: existingEcoPoints,
+    createdAt: snap.exists() ? (snap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString(),
   };
 
-  const userDocRef = doc(db, FIRESTORE_COLLECTIONS.USERS, uid);
   await setDoc(userDocRef, {
     ...profile,
+    ecoPoints: existingEcoPoints,
     updatedAtServer: serverTimestamp(),
     createdAtServer: serverTimestamp(),
   }, { merge: true });

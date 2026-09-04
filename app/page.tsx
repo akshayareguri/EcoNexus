@@ -213,7 +213,7 @@ const INITIAL_EXCHANGE_REQUESTS: ExchangeRequest[] = [
 export default function Home() {
   const [activeTab, setActiveTab] = useState<SectionTab>("manage-waste");
   const [currentRole, setCurrentRole] = useState<"citizen" | "recycler" | "municipality">("citizen");
-  const [userPoints, setUserPoints] = useState<number>(850);
+  const [userPoints, setUserPoints] = useState<number>(0);
 
   // Authentication State
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
@@ -250,12 +250,18 @@ export default function Home() {
       unsubUserTx();
 
       if (u) {
+        const initialPts = typeof profile?.ecoPoints === "number" ? profile.ecoPoints : 0;
+        setUserPoints(initialPts);
+
         unsubUserPoints = subscribeToUserEcoPoints(u.uid, (pts) => {
           setUserPoints(pts);
         });
         unsubUserTx = subscribeToPointsTransactions(u.uid, (txs) => {
           setPointsTransactions(txs);
         });
+      } else {
+        setUserPoints(0);
+        setPointsTransactions([]);
       }
     });
 
@@ -327,10 +333,11 @@ export default function Home() {
   };
 
   const handleDeductPoints = (points: number): boolean => {
-    if (userPoints >= points) {
+    if (authUser && userPoints >= points) {
+      const targetUid = authUser.uid;
       setUserPoints((prev) => {
-        const nextPoints = prev - points;
-        syncUserPointsToFirestore("anonymous-citizen", nextPoints);
+        const nextPoints = Math.max(0, prev - points);
+        syncUserPointsToFirestore(targetUid, nextPoints);
         return nextPoints;
       });
       return true;

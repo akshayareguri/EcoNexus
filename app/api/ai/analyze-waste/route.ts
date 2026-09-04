@@ -38,7 +38,7 @@ export async function POST(req: Request) {
           content: [
             {
               type: "text",
-              text: "Analyze this image of a waste or discarded item. First, prioritize identifying the actual object (e.g., smartphone, plastic bottle, cardboard box, battery). Then determine its primary material composition and appropriate waste category. Return strictly raw JSON with no markdown formatting or extra text in this exact schema: {\"item\": \"specific item name\", \"material\": \"primary material\", \"category\": \"Electronics|Plastics|Glass|Paper|Metals|Organic|Textiles|Hazardous|General\", \"confidence\": 0.95}",
+              text: "Identify the object in this image, its primary material, and waste category. Respond ONLY with a single raw JSON object. Do NOT include thinking, reasoning, markdown formatting, or preamble. Return ONLY this exact JSON schema: {\"item\": \"specific item name\", \"material\": \"primary material\", \"category\": \"Electronics|Plastics|Glass|Paper|Metals|Organic|Textiles|Hazardous|General\", \"confidence\": 0.95}",
             },
             {
               type: "image_url",
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         },
       ],
       temperature: 0.1,
-      max_tokens: 300,
+      max_tokens: 800,
     };
 
     const response = await fetch("https://api.featherless.ai/v1/chat/completions", {
@@ -65,10 +65,16 @@ export async function POST(req: Request) {
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
       console.error("[Featherless API HTTP Error]: Status", response.status, "Body:", errorText);
+      
+      const isBusy = response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504;
+      const userErrorMsg = isBusy
+        ? "Featherless AI vision service is currently busy. Please click 'Retry Analysis' in a moment."
+        : `Featherless AI analysis temporary error (${response.status}). Please retry or try another image.`;
+
       return NextResponse.json(
         {
           success: false,
-          error: `Featherless AI API error (${response.status}): ${errorText}`,
+          error: userErrorMsg,
         },
         { status: response.status >= 400 && response.status < 600 ? response.status : 500 }
       );
@@ -80,18 +86,29 @@ export async function POST(req: Request) {
     console.log("[Featherless HTTP Status]:", response.status);
     console.log("[Featherless Response Body]:", JSON.stringify(data, null, 2));
 
-    // Extract raw message content from response structure (handles string or array content)
+    // Extract raw message content from response structure (handles string, array, or reasoning fields)
     let rawContent = "";
-    const choiceMessageContent = data?.choices?.[0]?.message?.content;
+    const choice = data?.choices?.[0];
+    const msg = choice?.message;
 
-    if (typeof choiceMessageContent === "string") {
-      rawContent = choiceMessageContent;
-    } else if (Array.isArray(choiceMessageContent)) {
-      rawContent = choiceMessageContent
-        .map((part: { text?: string } | string) => (typeof part === "string" ? part : part?.text || ""))
-        .join("\n");
-    } else if (typeof data?.choices?.[0]?.text === "string") {
-      rawContent = data.choices[0].text;
+    if (msg) {
+      if (typeof msg.content === "string" && msg.content.trim()) {
+        rawContent = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        rawContent = msg.content
+          .map((part: { text?: string } | string) => (typeof part === "string" ? part : part?.text || ""))
+          .join("\n");
+      }
+      
+      // Fallback: check reasoning_content or thinking fields if content is empty or lacks JSON
+      if (!rawContent.includes("{") && typeof msg.reasoning_content === "string") {
+        rawContent = (rawContent + "\n" + msg.reasoning_content).trim();
+      }
+      if (!rawContent.includes("{") && typeof msg.thinking === "string") {
+        rawContent = (rawContent + "\n" + msg.thinking).trim();
+      }
+    } else if (typeof choice?.text === "string") {
+      rawContent = choice.text;
     }
 
     if (!rawContent || !rawContent.trim()) {
@@ -102,20 +119,23 @@ export async function POST(req: Request) {
       );
     }
 
+    // Strip thinking tags if present in raw content
+    const cleanedContent = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
     // Robust JSON parsing algorithm
     let parsedResult: { item?: string; material?: string; category?: string; confidence?: number | string } | null = null;
 
-    // 1. Direct JSON parse attempt
+    // 1. Direct JSON parse attempt on cleaned or raw content
     try {
-      parsedResult = JSON.parse(rawContent.trim());
+      parsedResult = JSON.parse(cleanedContent);
     } catch {
       // 2. Strip code fences attempt
-      const stripped = rawContent.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, "$1").trim();
+      const stripped = cleanedContent.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, "$1").trim();
       try {
         parsedResult = JSON.parse(stripped);
       } catch {
-        // 3. Extract JSON object via regex matching
-        const match = rawContent.match(/\{[\s\S]*?\}/);
+        // 3. Extract JSON object via regex matching across cleaned or raw content
+        const match = cleanedContent.match(/\{[\s\S]*?\}/) || rawContent.match(/\{[\s\S]*?\}/);
         if (match) {
           try {
             parsedResult = JSON.parse(match[0]);

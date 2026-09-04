@@ -267,6 +267,10 @@ export async function analyzeWasteImage(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   fileName?: string
 ): Promise<WasteAnalysisResult> {
+  if (!imageSrc || typeof imageSrc !== "string" || !imageSrc.trim()) {
+    throw new Error("No valid image provided for AI analysis. Please select a valid photo.");
+  }
+
   let aiItem = "";
   let aiMaterial = "";
   let aiCategory = "";
@@ -280,7 +284,10 @@ export async function analyzeWasteImage(
     body: JSON.stringify({ image: imageSrc }),
   });
 
-  const data = await res.json();
+  const data = await res.json().catch(() => ({
+    success: false,
+    error: "Server returned invalid response format. Please try again.",
+  }));
 
   if (res.ok && data.success) {
     aiItem = data.item || "Identified Waste Item";
@@ -289,7 +296,7 @@ export async function analyzeWasteImage(
     const rawConf = typeof data.confidence === "number" ? data.confidence : 0.9;
     aiConfidence = Math.round(rawConf <= 1 ? rawConf * 100 : rawConf);
   } else {
-    throw new Error(data.error || "Featherless AI Waste Analysis failed.");
+    throw new Error(data.error || "Featherless AI Waste Analysis failed. Please try again.");
   }
 
   // Application-side normalization layer & conflict resolution
